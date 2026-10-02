@@ -1,0 +1,108 @@
+
+services:
+  house-scoring-1:
+    build: ../house-scoring
+    container_name: house-scoring-1
+    ports:
+      - "5000:5000"
+    environment:
+      - HOUSE_DB_PATH=/data/city_scores.db
+      - HOUSE_APP_PERSON=Lindsey
+      - CENSUS_API_KEY=${CENSUS_API_KEY}
+    env_file:
+      - ../house-scoring/.env
+    volumes:
+      - ../house-scoring/data:/data
+    restart: unless-stopped
+
+  house-scoring-2:
+    build: ../house-scoring
+    container_name: house-scoring-2
+    ports:
+      - "5001:5000"
+    environment:
+      - HOUSE_DB_PATH=/data/city_scores.db
+      - HOUSE_APP_PERSON=Chris
+      - CENSUS_API_KEY=${CENSUS_API_KEY}
+    env_file:
+      - ../house-scoring/.env
+    volumes:
+      - ../house-scoring/data:/data
+    restart: unless-stopped
+
+  finance-dashboard-app:
+    image: finance-dashboard-app
+    container_name: finance-dashboard-app
+    volumes:
+      - /home/cgeraci/finance-dashboard/data:/app/data
+    environment:
+      FINANCE_DB_PATH: /app/data/New_Finances.db
+    working_dir: /app
+    command: streamlit run Home.py --server.address=0.0.0.0 --server.port=8501
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    ports:
+      - "42719:8501"
+    networks:
+      - default
+      - monitoring
+    restart: unless-stopped
+
+  pawsitively-loved-app:
+    image: pawsitively-loved-app
+    container_name: pawsitively-loved-app
+    volumes:
+      - /home/cgeraci/pawsitively-loved/data:/app/data
+      - /home/cgeraci/pawsitively-loved/gmail_token.json:/app/gmail_token.json
+      - /home/cgeraci/pawsitively-loved/gmail_credentials.json:/app/gmail_credentials.json
+      - /home/cgeraci/pawsitively-loved/token.json:/app/token.json
+      - /home/cgeraci/pawsitively-loved/credentials.json:/app/credentials.json
+    environment:
+      APP_ENV: production
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 587
+      SMTP_USERNAME: "${PL_SMTP_USERNAME}"
+      SMTP_PASSWORD: "${PL_SMTP_PASSWORD}"
+      EMAIL_TO: "${PL_SMTP_USERNAME}"
+      EMAIL_FROM: "${PL_SMTP_USERNAME}"
+      GOOGLE_MAPS_API_KEY: "${GOOGLE_MAPS_API_KEY}"
+      PLAID_CLIENT_ID: "${PLAID_CLIENT_ID}"
+      PLAID_SECRET: "${PLAID_SECRET}"
+      PLAID_ENV: production
+    working_dir: /app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "42720:8000"
+    networks:
+      - default
+      - monitoring
+    restart: unless-stopped
+
+  duplicati:
+    image: duplicati/duplicati
+    container_name: duplicati
+    volumes:
+      - duplicati-data:/data
+      - /mnt/backup-drive:/backups
+      - /home/cgeraci/finance-dashboard:/source/finance-dashboard:ro
+      - /home/cgeraci/pawsitively-loved:/source/pawsitively-loved:ro
+      - /home/cgeraci/monitoring:/source/monitoring:ro
+      - /home/cgeraci/apps:/source/apps:ro
+      - /mnt/storage/immich:/source/storage/immich:ro
+      - /home/cgeraci/jellyfin:/source/jellyfin:ro
+      - /home/cgeraci/house-scoring:/source/house-scoring:ro
+    command: duplicati-server
+    ports:
+      - "8200:8200"
+    restart: unless-stopped
+
+volumes:
+  duplicati-data:
+
+networks:
+  monitoring:
+    external: true
